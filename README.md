@@ -162,6 +162,7 @@ $b64encodeFullPath = "QzpcVXNlcnNcUHVibGljXFVwZGF0ZS5leGU=";
 
 3. 调用 `inlineExecute-Assembly` 函数通过 SharpHostInfo 扫描当前 C 端主机信息。
 
+> ScreenshotBOFPlus 优化了能在无需注入的情况下在 Windows 启动全局缩放时获取完整截图
 
 而 ` BypassUAC` 调用 `inlineExecute-Assembly` 函数执行 SharpBypassUAC 工具通过 `computerdefaults` 技术以及编码后的木马路径进行 UAC 绕过，并上线管理器权限 Session。
 
@@ -192,6 +193,7 @@ $b64encodeFullPath = "QzpcVXNlcnNcUHVibGljXFVwZGF0ZS5leGU=";
 - https://github.com/anthemtotheego/InlineExecute-Assembly
 - https://github.com/trustedsec/CS-Situational-Awareness-BOF
 - https://github.com/qwqdanchun/Pillager
+- https://github.com/baiyies/ScreenshotBOFPlus
 - https://github.com/shmilylty/SharpHostInfo
 - https://github.com/FatRodzianko/SharpBypassUAC
 - https://github.com/0x727/SchTask_0x727
